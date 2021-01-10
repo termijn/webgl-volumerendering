@@ -1,0 +1,33 @@
+html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: 'Noto Serif', serif;
+    font-size: 1.0em;
+    background-image: linear-gradient(#555, #333);
+}
+
+#viewport {
+    display: block;
+    height: 100vh; 
+    width: 100vw; 
+    display: block;
+}
+
+.title {
+    position: absolute;
+    left:1em;
+    top:1em;
+    width: 10em;
+    height: 30em;
+    padding: 1em;
+}
+
+#title_background {
+    background-color: #AAA;
+    opacity: 0.7;
+    border-radius: 0.5em;
+}
+
+#title_text {
+    color: #FFF;
+}

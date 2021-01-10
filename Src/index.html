@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Volume rendering using WebGL</title>
+
+        <link rel="preconnect" href="https://fonts.gstatic.com">
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Serif&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="style.css"></link>
+
+        <link href="bootstrap/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+        <script src="bootstrap/js/bootstrap.bundle.min.js" integrity="sha384-ygbV9kiqUc6oa4msXn9868pTtWMgiQaeYH7/t7LECLbyPA2x65Kgf80OJFdroafW" crossorigin="anonymous"></script>
+
+        <script src="gl-matrix-min.js"></script>
+        
+        <script src="volumerenderer.js"></script>
+
+        <script src="shaderutils.js"></script>
+        <script src="viewport.js"></script>
+    </head>
+
+    <body>
+        <canvas id="viewport" width="1024" height="1024"></canvas>
+        <div id="title_background" class="title"></div>
+        <div id="title_text" class="title">
+            <h1>WebGL</h1>
+            <div>
+                <label for="offsetSlider" class="form-label">Offset</label>
+                <input type="range" class="form-range" id="offsetSlider" min="-0.4" max="0.4" step="0.005">
+            </div>
+
+            <div>
+                <label for="brightnessSlider" class="form-label">Brightness</label>
+                <input type="range" class="form-range" id="brightnessSlider" min="-0.4" max="0.4" step="0.005">
+            </div>
+        </div>
+
+    </body>
+</html>
