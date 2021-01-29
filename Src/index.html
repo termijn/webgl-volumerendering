@@ -19,13 +19,17 @@
     </head>
 
     <body>
-        <canvas id="viewport" width="1024" height="1024"></canvas>
+        <canvas id="viewport" width="1048" height="1048"></canvas>
         <div id="title_background" class="title"></div>
         <div id="title_text" class="title">
-            <h1>WebGL</h1>
+            <h1>Volumizer</h1>
             <div>
-                <label for="offsetSlider" class="form-label">Offset</label>
-                <input type="range" class="form-range" id="offsetSlider" min="-0.4" max="0.4" step="0.005">
+                <label for="offsetSlider" class="form-label">Window Level</label>
+                <input type="range" class="form-range" id="offsetSlider" min="-1024" max="3071" step="1">
+            </div>
+            <div>
+                <label for="widthSlider" class="form-label">Window Width</label>
+                <input type="range" class="form-range" id="widthSlider" min="1" max="4096" step="1">
             </div>
 
             <div>

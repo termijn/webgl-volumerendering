@@ -17,7 +17,7 @@ var VolumeRenderer = function(gl) {
             req.onload = function(evt) {
                 var dataBuffer = req.response;
                 if (dataBuffer) {
-                    dataBuffer = new Uint8Array(dataBuffer);
+                    dataBuffer = new Uint16Array(dataBuffer);
                     console.log("volume loaded");
                     resolve(dataBuffer);
                 } else {
@@ -195,7 +195,7 @@ var VolumeRenderer = function(gl) {
         gl.uniformMatrix4fv(this.getUniformLocation("cameraToWorld"), false, this.cameraToWorld);
         gl.uniformMatrix4fv(this.getUniformLocation("clipSpaceToCamera"), false, clipSpaceToCamera);
 
-        var lightInCameraSpace = vec3.fromValues(300.0,100.0,300.0);
+        var lightInCameraSpace = vec3.fromValues(300.0,300.0,300.0);
         var lightInModelSpace = vec3.create();
         vec3.transformMat4(lightInModelSpace, lightInCameraSpace, this.cameraToWorld);
         vec3.transformMat4(lightInModelSpace, lightInModelSpace, this.worldToModel);
@@ -209,8 +209,12 @@ var VolumeRenderer = function(gl) {
         return gl.getUniformLocation(this.shaderProgram, name);
     }
 
-    this.setOffset = function(value) {
-        gl.uniform1f(this.getUniformLocation("offset"), value);
+    this.setWindowLevel = function(value) {
+        gl.uniform1f(this.getUniformLocation("windowLevel"), value);
+    }
+
+    this.setWindowWidth = function(value) {
+        gl.uniform1f(this.getUniformLocation("windowWidth"), value);
     }
 
     this.setBrightness = function(value) {
@@ -224,15 +228,36 @@ var VolumeRenderer = function(gl) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_3D, texture);
         gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R8, this.width, this.height, this.slices);
-        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
         gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, 
             this.width, this.height, this.slices, 
             gl.RED, gl.UNSIGNED_BYTE, this.voxels);
     }
+
+    this.createVolumeTexture16 = function(gl) {
+        gl.useProgram(this.shaderProgram);
+
+        var texture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_3D, texture);
+        gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R16UI, this.width, this.height, this.slices);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, 
+            this.width, this.height, this.slices, 
+            gl.RED_INTEGER, gl.UNSIGNED_SHORT, this.voxels);
+    }    
 
     this.init = function(gl) {
         this.gl = gl;
@@ -243,10 +268,12 @@ var VolumeRenderer = function(gl) {
         var fragmentShaderPromise = shaderutils.loadShaderSource("volumerenderer.frag");
 
         var file = "engine_256x256x128_uint8.raw";
-        //var file = "spine_256x256x256_uint8.raw";
+        var file = "spine_256x256x256_uint16.raw";
         //var file = "bonsai_256x256x256_uint8.raw";
         //var file = "skull_256x256x256_uint8.raw";
         //var file = "foot_256x256x256_uint8.raw";
+        //var file = "vertebra_512x512x512_uint16.raw";
+        //var file = "ct_512x512x448_uint16.raw";
         
         var fileRegex = /.*_(\d+)x(\d+)x(\d+)_*.*/;
         var m = file.match(fileRegex);
@@ -269,7 +296,7 @@ var VolumeRenderer = function(gl) {
             self.rotation = glMatrix.mat4.create();
             
             self.createVertexBuffer(gl, self.cubeStrip);
-            self.createVolumeTexture(gl);
+            self.createVolumeTexture16(gl);
      
             var longestAxis = Math.max(self.width, Math.max(self.height, self.slices));
             self.volScale = [
@@ -278,8 +305,18 @@ var VolumeRenderer = function(gl) {
                 self.slices / longestAxis];
             gl.uniform3iv(self.getUniformLocation("volume_dims"), [self.width, self.height, self.slices]);
             gl.uniform1i(self.getUniformLocation("volume"), 0);
-            gl.uniform1f(self.getUniformLocation("dt_scale"), 0.50);
-            gl.uniform1f(this.getUniformLocation("offset"), -0.15);
+            gl.uniform1f(self.getUniformLocation("dt_scale"), 0.25);
+
+            // spine
+            gl.uniform1f(this.getUniformLocation("rescaleIntercept"), -1200);
+            gl.uniform1f(this.getUniformLocation("rescaleSlope"), 0.06408789196612);
+
+            // CT
+            // gl.uniform1f(this.getUniformLocation("rescaleIntercept"), -1024);
+            // gl.uniform1f(this.getUniformLocation("rescaleSlope"), 1);
+
+            self.setWindowWidth(1048);
+            self.setWindowLevel(1048);
 
             self.loaded = true;
             console.log("Renderer loaded");

@@ -3,12 +3,42 @@
 precision highp int;
 precision highp float;
 
-uniform highp sampler3D volume;
+uniform highp usampler3D volume;
 uniform ivec3 volume_dims;
 uniform float dt_scale;
 uniform vec3 lightPosition;
-uniform float offset;
 uniform float brightness;
+
+uniform float windowLevel; // defined in rescaled values (after applying rescale)
+uniform float windowWidth; // defined in rescaled values (after applying rescale)
+uniform float rescaleIntercept;
+uniform float rescaleSlope;
+
+float colorSamplePoints[] =
+    float[9] (
+        -770.0,
+        -144.0,
+        62.0,
+        158.0,
+        210.0,
+        259.0,
+        466.0,
+        2001.0,
+        3071.0
+    );
+
+vec3 colorSamples[] =
+    vec3[9] (
+        vec3(0.79, 0.88, 0.82),
+        vec3(1.0, 0.78, 0.7),
+        vec3(0.73, 0.0, 0.03),
+        vec3(1.0, 0.14, 0.17),
+        vec3(1.0, 0.35, 0.17),
+        vec3(1.0, 0.64, 0.11),
+        vec3(0.94, 0.92, 0.73),
+        vec3(1.0, 1.0, 1.0),
+        vec3(1.0, 0.96, 0.99)
+    );
 
 in vec3 vray_dir;
 in vec3 transformed_eye;
@@ -20,6 +50,39 @@ vec3 normalAt(vec3 position);
 float traceLight(vec3 voxel, vec3 light);
 float softShadow(vec3 position);
 float pointlightShadow(vec3 p);
+vec3 applyColorMap(float value);
+float rescale(float value);
+float opacity(float value);
+
+float sampleVolume(vec3 position) {
+    uint v = texture(volume, position).r;
+    float vf = float(v);
+    return rescale(vf);
+}
+
+float sampleVolumeOpacity(vec3 position) {
+    return opacity(sampleVolume(position));
+}
+
+float rescale(float value) {
+    return rescaleSlope * value + rescaleIntercept;
+}
+
+float opacity(float value) {
+    float windowFloor = windowLevel - windowWidth / 2.0;
+    return clamp((value - windowFloor) / windowWidth, 0.0, 1.0);
+}
+
+// http://www.reedbeta.com/blog/quick-and-easy-gpu-random-numbers-in-d3d11/
+float wang_hash(int seed) {
+	seed = (seed ^ 61) ^ (seed >> 16);
+	seed *= 9;
+	seed = seed ^ (seed >> 4);
+	seed *= 0x27d4eb2d;
+	seed = seed ^ (seed >> 15);
+	return float(seed % 2147483647) / float(2147483647);
+}
+
 
 void main(void) {
     vec3 ray_dir = normalize(vray_dir);
@@ -32,16 +95,16 @@ void main(void) {
     vec3 dt_vec = 1.0 / (vec3(volume_dims) * abs(ray_dir));
     float dt = dt_scale * min(dt_vec.x, min(dt_vec.y, dt_vec.z));
 
-    vec4 skinColor = vec4(225.0 / 255.0, 173.0 / 255.0, 164.0 / 255.0, 1.0);
-    //vec4 skinColor = vec4(1.0);
-
     vec4 voxelColor = vec4(0.0);
-    vec3 p = vec3(0.0);
-    for (float t = t_hit.x; t < t_hit.y; t += dt) {
-        p = transformed_eye + t * ray_dir;
+    float offset = wang_hash(int(gl_FragCoord.x + 1024.0 * gl_FragCoord.y));
+    vec3 p = transformed_eye + (t_hit.x + offset * dt) * ray_dir;
 
-        float val = clamp(texture(volume, p).r +offset, 0.0,1.0);
-        vec4 val_color = vec4(val, val, val, val) * skinColor;
+    for (float t = t_hit.x; t < t_hit.y; t += dt) {
+        
+        float val = sampleVolume(p);
+        vec3 color = applyColorMap(val);
+        float opacity = opacity(val);
+        vec4 val_color = vec4(opacity * color, opacity);
         
         val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
         voxelColor.rgb += (1.0 - voxelColor.a) * val_color.a * val_color.rgb;
@@ -50,12 +113,13 @@ void main(void) {
         if (voxelColor.a >= 0.95) {
             break;
         }
+        p += ray_dir * dt;
     }
 
-    vec4 diffuse = vec4(0.8);
-    vec4 ambient = vec4(0.6);
-    vec4 specular = vec4(0.2, 0.2, 0.2, 0.2);
-    float shininess = 100.0;
+    vec4 diffuse = vec4(0.7);
+    vec4 ambient = vec4(0.3);
+    vec4 specular = vec4(0.6, 0.6, 0.6, 0.6);
+    float shininess = 10.0;
 
     vec3 voxelNormal = normalAt(p);
     vec3 lightDirection = normalize(lightPosition - p);
@@ -68,12 +132,28 @@ void main(void) {
     }
 
     vec4 lightColor = max(intensity * diffuse + spec, ambient);
-    float shadow = softShadow(p);
+    float shadow = pointlightShadow(p);
 
-    color.r = linear_to_srgb((shadow * voxelColor.r) + voxelColor.a * brightness);
-    color.g = linear_to_srgb((shadow * voxelColor.g) + voxelColor.a * brightness);
-    color.b = linear_to_srgb((shadow * voxelColor.b) + voxelColor.a * brightness);
+    color.r = linear_to_srgb((shadow * voxelColor.r * lightColor.r));
+    color.g = linear_to_srgb((shadow * voxelColor.g * lightColor.g));
+    color.b = linear_to_srgb((shadow * voxelColor.b * lightColor.b));
     color.a = voxelColor.a;
+}
+
+vec3 applyColorMap(float value) {
+    for(int i = 0; i < colorSamplePoints.length(); i++) {
+        if (value <= colorSamplePoints[i]) {
+            if (i == 0) {
+                return colorSamples[0];
+            } 
+            int prevIndex = i - 1;
+            float delta = abs(colorSamplePoints[i] - colorSamplePoints[prevIndex]);
+            float fraction = (value - colorSamplePoints[prevIndex]) / delta;
+            vec3 color = (1.0 - fraction) *  colorSamples[prevIndex] + fraction * colorSamples[i];
+            return color;
+        }
+    }
+    return colorSamples[colorSamples.length()-1];
 }
 
 float pointlightShadow(vec3 p) {
@@ -104,9 +184,9 @@ float softShadow(vec3 p) {
 vec3 normalAt(vec3 position) {
     float delta = 0.01;
     vec3 gradient = vec3( 
-        (texture(volume, position + vec3(1,0,0) * delta).r + texture(volume, position - vec3(1,0,0) * delta).r),
-        (texture(volume, position + vec3(0,1,0) * delta).r + texture(volume, position - vec3(0,1,0) * delta).r),
-        (texture(volume, position + vec3(0,0,1) * delta).r + texture(volume, position - vec3(0,0,1) * delta).r)
+        (sampleVolumeOpacity(position + vec3(1,0,0) * delta) + sampleVolumeOpacity(position - vec3(1,0,0) * delta)) * 0.5,
+        (sampleVolumeOpacity(position + vec3(0,1,0) * delta) + sampleVolumeOpacity(position - vec3(0,1,0) * delta)) * 0.5,
+        (sampleVolumeOpacity(position + vec3(0,0,1) * delta) + sampleVolumeOpacity(position - vec3(0,0,1) * delta)) * 0.5
     );
     return normalize(gradient);
 }
@@ -119,7 +199,7 @@ float traceLight(vec3 voxel, vec3 light) {
 
     vec2 box = intersect_box(o, d);
     float start = length(voxel - o);
-    
+
     vec3 voxelSize = 1.0 / vec3(volume_dims);
     float samplesPerVoxel = 1.0;
     float delta = min(voxelSize.x, min(voxelSize.y, voxelSize.z)) / samplesPerVoxel;
@@ -127,7 +207,7 @@ float traceLight(vec3 voxel, vec3 light) {
     float integrated = 0.0;
     for (float t = start; t < box.y; t += delta) {
         vec3 p = o + t * d;
-        float val = texture(volume, p).r + offset;
+        float val = sampleVolumeOpacity(p);
 
         integrated = integrated + val / samplesPerVoxel / 8.0;
 

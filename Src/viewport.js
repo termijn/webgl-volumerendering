@@ -38,7 +38,13 @@ function main() {
     const offsetSlider = document.querySelector("#offsetSlider");
     offsetSlider.addEventListener('input', function(e) {
         var value = e.target.value;
-        volume.setOffset(parseFloat(value));
+        volume.setWindowLevel(parseFloat(value));
+    });
+
+    const widthSlider = document.querySelector("#widthSlider");
+    widthSlider.addEventListener('input', function(e) {
+        var value = e.target.value;
+        volume.setWindowWidth(parseFloat(value));
     });
     
     const brightnessSlider = document.querySelector("#brightnessSlider");
