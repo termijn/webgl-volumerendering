@@ -1,6 +1,56 @@
 var vec3 = glMatrix.vec3;
 var mat4 = glMatrix.mat4;
 
+var toHalf = (function() {
+
+    var floatView = new Float32Array(1);
+    var int32View = new Int32Array(floatView.buffer);
+ 
+    /* This method is faster than the OpenEXR implementation (very often
+     * used, eg. in Ogre), with the additional benefit of rounding, inspired
+     * by James Tursa?s half-precision code. */
+    return function toHalf(val) {
+ 
+      floatView[0] = val;
+      var x = int32View[0];
+ 
+      var bits = (x >> 16) & 0x8000; /* Get the sign */
+      var m = (x >> 12) & 0x07ff; /* Keep one extra bit for rounding */
+      var e = (x >> 23) & 0xff; /* Using int is faster here */
+ 
+      /* If zero, or denormal, or exponent underflows too much for a denormal
+       * half, return signed zero. */
+      if (e < 103) {
+        return bits;
+      }
+ 
+      /* If NaN, return NaN. If Inf or exponent overflow, return Inf. */
+      if (e > 142) {
+        bits |= 0x7c00;
+        /* If exponent was 0xff and one mantissa bit was set, it means NaN,
+         * not Inf, so make sure we set one mantissa bit too. */
+        bits |= ((e == 255) ? 0 : 1) && (x & 0x007fffff);
+        return bits;
+      }
+ 
+      /* If exponent underflows but not too much, return a denormal */
+      if (e < 113) {
+        m |= 0x0800;
+        /* Extra rounding may overflow and set mantissa to 0 and exponent
+         * to 1, which is OK. */
+        bits |= (m >> (114 - e)) + ((m >> (113 - e)) & 1);
+        return bits;
+      }
+ 
+      bits |= ((e - 112) << 10) | (m >> 1);
+      /* Extra rounding. An overflow will set mantissa to 0 and increment
+       * the exponent, which is OK. */
+      bits += m & 1;
+      return bits;
+    };
+ 
+ }());
+
 var VolumeRenderer = function(gl) {
 
     this.loadVolume = function(url) {
@@ -18,8 +68,15 @@ var VolumeRenderer = function(gl) {
                 var dataBuffer = req.response;
                 if (dataBuffer) {
                     dataBuffer = new Uint16Array(dataBuffer);
+
+                    // Encode data as half-floats.
+                    var converted = new Uint16Array(dataBuffer.length);
+                    for (var i = 0; i < converted.length; i++) {
+                        converted[i] = toHalf(dataBuffer[i]);
+                    }
+
                     console.log("volume loaded");
-                    resolve(dataBuffer);
+                    resolve(converted);
                 } else {
                     alert("Unable to load buffer properly from volume?");
                     console.log("no buffer?");
@@ -217,10 +274,6 @@ var VolumeRenderer = function(gl) {
         gl.uniform1f(this.getUniformLocation("windowWidth"), value);
     }
 
-    this.setBrightness = function(value) {
-        gl.uniform1f(this.getUniformLocation("brightness"), value);
-    }
-
     this.createVolumeTexture = function(gl) {
         gl.useProgram(this.shaderProgram);
 
@@ -246,9 +299,9 @@ var VolumeRenderer = function(gl) {
         var texture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_3D, texture);
-        gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R16UI, this.width, this.height, this.slices);
-        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R16F, this.width, this.height, this.slices);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -256,7 +309,7 @@ var VolumeRenderer = function(gl) {
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
         gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, 
             this.width, this.height, this.slices, 
-            gl.RED_INTEGER, gl.UNSIGNED_SHORT, this.voxels);
+            gl.RED, gl.HALF_FLOAT, this.voxels);
     }    
 
     this.init = function(gl) {
@@ -267,8 +320,9 @@ var VolumeRenderer = function(gl) {
         var vertexShaderPromise = shaderutils.loadShaderSource("volumerenderer.vert");
         var fragmentShaderPromise = shaderutils.loadShaderSource("volumerenderer.frag");
 
-        var file = "engine_256x256x128_uint8.raw";
+        //var file = "engine_256x256x128_uint8.raw";
         var file = "spine_256x256x256_uint16.raw";
+        var file = "spine2_256x256x256_uint16.raw";
         //var file = "bonsai_256x256x256_uint8.raw";
         //var file = "skull_256x256x256_uint8.raw";
         //var file = "foot_256x256x256_uint8.raw";
@@ -305,7 +359,7 @@ var VolumeRenderer = function(gl) {
                 self.slices / longestAxis];
             gl.uniform3iv(self.getUniformLocation("volume_dims"), [self.width, self.height, self.slices]);
             gl.uniform1i(self.getUniformLocation("volume"), 0);
-            gl.uniform1f(self.getUniformLocation("dt_scale"), 0.25);
+            gl.uniform1f(self.getUniformLocation("dt_scale"), 0.5);
 
             // spine
             gl.uniform1f(this.getUniformLocation("rescaleIntercept"), -1200);
@@ -316,7 +370,7 @@ var VolumeRenderer = function(gl) {
             // gl.uniform1f(this.getUniformLocation("rescaleSlope"), 1);
 
             self.setWindowWidth(1048);
-            self.setWindowLevel(1048);
+            self.setWindowLevel(0);
 
             self.loaded = true;
             console.log("Renderer loaded");

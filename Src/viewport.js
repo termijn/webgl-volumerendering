@@ -45,13 +45,7 @@ function main() {
     widthSlider.addEventListener('input', function(e) {
         var value = e.target.value;
         volume.setWindowWidth(parseFloat(value));
-    });
-    
-    const brightnessSlider = document.querySelector("#brightnessSlider");
-    brightnessSlider.addEventListener('input', function(e) {
-        var value = e.target.value;
-        volume.setBrightness(parseFloat(value));
-    });
+    });    
 
     canvas.addEventListener('mousedown', function(e) {
         var e = window.event || e;

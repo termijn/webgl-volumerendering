@@ -3,11 +3,10 @@
 precision highp int;
 precision highp float;
 
-uniform highp usampler3D volume;
+uniform highp sampler3D volume;
 uniform ivec3 volume_dims;
 uniform float dt_scale;
 uniform vec3 lightPosition;
-uniform float brightness;
 
 uniform float windowLevel; // defined in rescaled values (after applying rescale)
 uniform float windowWidth; // defined in rescaled values (after applying rescale)
@@ -40,6 +39,22 @@ vec3 colorSamples[] =
         vec3(1.0, 0.96, 0.99)
     );
 
+float opacitySamplePoints[] = 
+    float[4] (
+        40.0,
+        128.0,
+        330.0,
+        299.0
+    );
+
+float opacitySamples[] = 
+    float[4] (
+        0.0,
+        0.14027,
+        0.38847,
+        0.93663
+    );
+
 in vec3 vray_dir;
 in vec3 transformed_eye;
 out vec4 color;
@@ -53,11 +68,11 @@ float pointlightShadow(vec3 p);
 vec3 applyColorMap(float value);
 float rescale(float value);
 float opacity(float value);
+float applyOpacityMap(float value);
 
 float sampleVolume(vec3 position) {
-    uint v = texture(volume, position).r;
-    float vf = float(v);
-    return rescale(vf);
+    float v = texture(volume, position).r;
+    return rescale(v);
 }
 
 float sampleVolumeOpacity(vec3 position) {
@@ -69,8 +84,10 @@ float rescale(float value) {
 }
 
 float opacity(float value) {
+    float opacity = applyOpacityMap(value);
+
     float windowFloor = windowLevel - windowWidth / 2.0;
-    return clamp((value - windowFloor) / windowWidth, 0.0, 1.0);
+    return clamp(opacity * ((value - windowFloor) / windowWidth), 0.0, 1.0);
 }
 
 // http://www.reedbeta.com/blog/quick-and-easy-gpu-random-numbers-in-d3d11/
@@ -82,7 +99,6 @@ float wang_hash(int seed) {
 	seed = seed ^ (seed >> 15);
 	return float(seed % 2147483647) / float(2147483647);
 }
-
 
 void main(void) {
     vec3 ray_dir = normalize(vray_dir);
@@ -117,9 +133,9 @@ void main(void) {
     }
 
     vec4 diffuse = vec4(0.7);
-    vec4 ambient = vec4(0.3);
+    vec4 ambient = vec4(0.2);
     vec4 specular = vec4(0.6, 0.6, 0.6, 0.6);
-    float shininess = 10.0;
+    float shininess = 50.0;
 
     vec3 voxelNormal = normalAt(p);
     vec3 lightDirection = normalize(lightPosition - p);
@@ -132,7 +148,7 @@ void main(void) {
     }
 
     vec4 lightColor = max(intensity * diffuse + spec, ambient);
-    float shadow = pointlightShadow(p);
+    float shadow = softShadow(p);
 
     color.r = linear_to_srgb((shadow * voxelColor.r * lightColor.r));
     color.g = linear_to_srgb((shadow * voxelColor.g * lightColor.g));
@@ -140,16 +156,32 @@ void main(void) {
     color.a = voxelColor.a;
 }
 
+float applyOpacityMap(float value) {
+    for(int i = 0; i < opacitySamplePoints.length(); i++) {
+        if (value <= opacitySamplePoints[i]) {
+            if (i == 0) {
+                return opacitySamples[0];
+            }
+            int prevIndex = i - 1;
+            float delta = abs(opacitySamplePoints[i] - opacitySamplePoints[prevIndex]);
+            float fraction = (value - opacitySamplePoints[prevIndex]) / delta;
+            float color = mix(opacitySamples[prevIndex], opacitySamples[i], fraction);
+            return color;
+        }
+    }
+    return opacitySamples[opacitySamples.length()-1];
+}
+
 vec3 applyColorMap(float value) {
     for(int i = 0; i < colorSamplePoints.length(); i++) {
         if (value <= colorSamplePoints[i]) {
             if (i == 0) {
                 return colorSamples[0];
-            } 
+            }
             int prevIndex = i - 1;
             float delta = abs(colorSamplePoints[i] - colorSamplePoints[prevIndex]);
             float fraction = (value - colorSamplePoints[prevIndex]) / delta;
-            vec3 color = (1.0 - fraction) *  colorSamples[prevIndex] + fraction * colorSamples[i];
+            vec3 color = mix(colorSamples[prevIndex], colorSamples[i], fraction);
             return color;
         }
     }
@@ -164,7 +196,7 @@ float pointlightShadow(vec3 p) {
 float softShadow(vec3 p) {
     float shadow = 0.0;
     float totalShadow = 0.0;
-    float delta = 0.01;
+    float delta = 0.02;
     vec3 minPos = p - vec3(delta);
 
     // Soften shadow
@@ -182,11 +214,16 @@ float softShadow(vec3 p) {
 }
 
 vec3 normalAt(vec3 position) {
-    float delta = 0.01;
-    vec3 gradient = vec3( 
-        (sampleVolumeOpacity(position + vec3(1,0,0) * delta) + sampleVolumeOpacity(position - vec3(1,0,0) * delta)) * 0.5,
-        (sampleVolumeOpacity(position + vec3(0,1,0) * delta) + sampleVolumeOpacity(position - vec3(0,1,0) * delta)) * 0.5,
-        (sampleVolumeOpacity(position + vec3(0,0,1) * delta) + sampleVolumeOpacity(position - vec3(0,0,1) * delta)) * 0.5
+    vec3 voxelSize = vec3(
+        1.0 / float(volume_dims.x),
+        1.0 / float(volume_dims.y),
+        1.0 / float(volume_dims.z)
+    );    
+
+    vec3 gradient = vec3(
+        (sampleVolumeOpacity(position + vec3(1,0,0) * voxelSize) + sampleVolumeOpacity(position - vec3(1,0,0) * voxelSize)),
+        (sampleVolumeOpacity(position + vec3(0,1,0) * voxelSize) + sampleVolumeOpacity(position - vec3(0,1,0) * voxelSize)),
+        (sampleVolumeOpacity(position + vec3(0,0,1) * voxelSize) + sampleVolumeOpacity(position - vec3(0,0,1) * voxelSize))
     );
     return normalize(gradient);
 }
