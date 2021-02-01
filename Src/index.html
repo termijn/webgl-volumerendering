@@ -19,19 +19,27 @@
     </head>
 
     <body>
-        <canvas id="viewport" width="2048" height="2048"></canvas>
+        <canvas id="viewport" width="1024" height="1024"></canvas>
+        <div id="labelFps"></div>
+
         <div id="title_background" class="title"></div>
         <div id="title_text" class="title">
             <h1>Volumizer</h1>
             <div>
-                <label for="offsetSlider" class="form-label">Window Level</label>
+                <label for="offsetSlider" class="form-label" id="labelWindowLevel">Window Level</label>
                 <input type="range" class="form-range" id="offsetSlider" min="-3024" max="3071" step="1">
             </div>
             <div>
                 <label for="widthSlider" class="form-label">Window Width</label>
                 <input type="range" class="form-range" id="widthSlider" min="1" max="4096" step="1">
             </div>
+            <div>
+                <label for="sliderSamplingRate" class="form-label" id="labelSamplingRate">Sampling rate (2x)</label>
+                <input type="range" class="form-range" id="sliderSamplingRate" min="0" max="4" step="1" value="3">
+            </div>
         </div>
-
+        <div class="progress">
+            <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">Loading dataset</div>
+        </div>
     </body>
 </html>

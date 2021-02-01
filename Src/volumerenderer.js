@@ -1,54 +1,36 @@
 var vec3 = glMatrix.vec3;
 var mat4 = glMatrix.mat4;
 
-var toHalf = (function() {
-
+// Converts the given integer into a half float.
+var toHalfFloat = (function() {
     var floatView = new Float32Array(1);
     var int32View = new Int32Array(floatView.buffer);
- 
-    /* This method is faster than the OpenEXR implementation (very often
-     * used, eg. in Ogre), with the additional benefit of rounding, inspired
-     * by James Tursa?s half-precision code. */
-    return function toHalf(val) {
- 
+    return function toHalfFloat(val) { 
       floatView[0] = val;
       var x = int32View[0];
  
-      var bits = (x >> 16) & 0x8000; /* Get the sign */
-      var m = (x >> 12) & 0x07ff; /* Keep one extra bit for rounding */
-      var e = (x >> 23) & 0xff; /* Using int is faster here */
+      var bits = (x >> 16) & 0x8000;
+      var m = (x >> 12) & 0x07ff;
+      var e = (x >> 23) & 0xff;
  
-      /* If zero, or denormal, or exponent underflows too much for a denormal
-       * half, return signed zero. */
       if (e < 103) {
         return bits;
       }
  
-      /* If NaN, return NaN. If Inf or exponent overflow, return Inf. */
       if (e > 142) {
         bits |= 0x7c00;
-        /* If exponent was 0xff and one mantissa bit was set, it means NaN,
-         * not Inf, so make sure we set one mantissa bit too. */
         bits |= ((e == 255) ? 0 : 1) && (x & 0x007fffff);
         return bits;
       }
- 
-      /* If exponent underflows but not too much, return a denormal */
       if (e < 113) {
         m |= 0x0800;
-        /* Extra rounding may overflow and set mantissa to 0 and exponent
-         * to 1, which is OK. */
         bits |= (m >> (114 - e)) + ((m >> (113 - e)) & 1);
         return bits;
       }
- 
       bits |= ((e - 112) << 10) | (m >> 1);
-      /* Extra rounding. An overflow will set mantissa to 0 and increment
-       * the exponent, which is OK. */
       bits += m & 1;
       return bits;
     };
- 
  }());
 
 var VolumeRenderer = function(gl) {
@@ -59,7 +41,8 @@ var VolumeRenderer = function(gl) {
             req.open("GET", url, true);
 	        req.responseType = "arraybuffer";
             req.onprogress = function(evt) {
-                console.log(evt);
+                const event = new CustomEvent('loading', { detail: evt.loaded / evt.total * 100 });
+                document.dispatchEvent(event);
             };
             req.onerror = function(evt) {
                 console.log(evt);
@@ -69,10 +52,11 @@ var VolumeRenderer = function(gl) {
                 if (dataBuffer) {
                     dataBuffer = new Uint16Array(dataBuffer);
 
-                    // Encode data as half-floats.
+                    // Encode data as half-floats. Javascript doesn't support Float16 arrays, so
+                    // we store it in a Uint16Array.
                     var converted = new Uint16Array(dataBuffer.length);
                     for (var i = 0; i < converted.length; i++) {
-                        converted[i] = toHalf(dataBuffer[i]);
+                        converted[i] = toHalfFloat(dataBuffer[i]);
                     }
 
                     console.log("volume loaded");
@@ -136,35 +120,9 @@ var VolumeRenderer = function(gl) {
         this.isMouseDragging = false;
     }
 
-    this.mouseWheel = function(e) {
+    this.mouseWheel = function(distance) {
         
-        this.fieldOfView = Math.min(Math.PI / 180 * 120, Math.max(Math.PI / 180 * 5, this.fieldOfView * Math.pow(2, e.deltaY / 1000.0)));
-    }
-
-    this.createVolume = function() {
-        this.width = 100;
-        this.height = 100;
-        this.slices = 100;
-        var result = new Uint8Array(this.width * this.height * this.slices);
-        for(var z = 0; z < this.slices; z++) {
-            for(var y = 0; y < this.height; y++) {
-                for (var x = 0; x < this.width; x++) {
-
-                    var position = vec3.fromValues(x, y, z);
-                    var center = vec3.fromValues(this.width / 2.0, this.height / 2.0, this.slices / 2.0);
-                    var fromCenter = vec3.create();
-                    vec3.subtract(fromCenter, position, center);
-
-                    var distance = vec3.length(fromCenter);
-                    var fraction = Math.min(distance / (this.width / 2.0), 1);
-                    var intensity = distance / (this.width / 2.0) < 1 ? 255 : 0;
-                    //var intensity = 255 - fraction * 255;
-                    result[(z * this.width * this.height) + y * this.width + x] = intensity;
-                }
-            }
-        }
-
-        return result;
+        this.fieldOfView = Math.min(Math.PI / 180 * 120, Math.max(Math.PI / 180 * 5, this.fieldOfView * Math.pow(2, -distance / 10.0)));
     }
 
     this.createCubeStrip = function() {
@@ -274,23 +232,37 @@ var VolumeRenderer = function(gl) {
         gl.uniform1f(this.getUniformLocation("windowWidth"), value);
     }
 
-    this.createVolumeTexture = function(gl) {
-        gl.useProgram(this.shaderProgram);
 
+    this.createTexture1D = function(gl, textureId, values) {
+        gl.useProgram(this.shaderProgram);
         var texture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_3D, texture);
-        gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R8, this.width, this.height, this.slices);
-        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        
+        gl.activeTexture(textureId);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, values.length, 1);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-        gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, 
-            this.width, this.height, this.slices, 
-            gl.RED, gl.UNSIGNED_BYTE, this.voxels);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, values.length, 1, gl.RED, gl.FLOAT, values);
+    }
+
+    this.createOpacitySamplesTexture = function(gl, samples) {
+        this.createTexture1D(gl, gl.TEXTURE2, samples);
+        gl.uniform1i(this.getUniformLocation('opacityMapSamples'), 2);
+    }
+
+    this.createOpacityPositionsTexture = function(gl, positions) {
+        this.createTexture1D(gl, gl.TEXTURE1, positions);
+        gl.uniform1i(this.getUniformLocation('opacityMapPositions'), 1);
+        gl.uniform1i(this.getUniformLocation('numberOfOpacitySamples'), positions.length);
+    }
+
+    this.createColorPositionsTexture = function(gl, positions) {
+        this.createTexture1D(gl, gl.TEXTURE3, positions);
+        gl.uniform1i(this.getUniformLocation('colorMapPositions'), 3);
+        gl.uniform1i(this.getUniformLocation('numberOfColorSamples'), positions.length);
     }
 
     this.createVolumeTexture16 = function(gl) {
@@ -310,7 +282,54 @@ var VolumeRenderer = function(gl) {
         gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, 
             this.width, this.height, this.slices, 
             gl.RED, gl.HALF_FLOAT, this.voxels);
-    }    
+        gl.uniform1i(this.getUniformLocation("volume"), 0);
+    }
+
+    this.createOpacityMap = function(gl) {
+        var positions = new Float32Array([40, 128, 330, 299]);
+        this.createOpacityPositionsTexture(gl, positions);
+
+        var opacitySamples = new Float32Array([0, 0.14027,0.38847, 0.93663]);
+        this.createOpacitySamplesTexture(gl, opacitySamples);
+    }
+
+    this.createColorMapSamplesTexture = function(gl, colors) {
+        gl.useProgram(this.shaderProgram);
+        var texture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16F, colors.length, 1);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, colors.length / 3, 1, gl.RGB, gl.FLOAT, colors);
+        gl.uniform1i(this.getUniformLocation("colorMapSamples"), 4);
+    }
+
+    this.createColorMap = function(gl) {
+        var positions = new Float32Array([-770.0, -144.0, 62.0, 158.0, 210.0, 259.0, 466.0, 2001.0, 3071.0]);
+        this.createColorPositionsTexture(gl, positions);
+
+        var samples = new Float32Array([
+            0.79, 0.88, 0.82,
+            1.0, 0.78, 0.7,
+            0.73, 0.0, 0.03,
+            1.0, 0.14, 0.17,
+            1.0, 0.35, 0.17,
+            1.0, 0.64, 0.11,
+            0.94, 0.92, 0.73,
+            1.0, 1.0, 1.0,
+            1.0, 0.96, 0.99
+        ]);
+        this.createColorMapSamplesTexture(gl, samples);
+    }
+
+    this.setSampleRate = function(value) {
+        gl.uniform1f(this.getUniformLocation("dt_scale"), 1.0 / value);
+    }
 
     this.init = function(gl) {
         this.gl = gl;
@@ -321,8 +340,8 @@ var VolumeRenderer = function(gl) {
         var fragmentShaderPromise = shaderutils.loadShaderSource("volumerenderer.frag");
 
         //var file = "engine_256x256x128_uint8.raw";
-        var file = "spine_256x256x256_uint16.raw";
         var file = "spine2_256x256x256_uint16.raw";
+        //var file = "spine2_256x256x256_uint16.raw";
         //var file = "bonsai_256x256x256_uint8.raw";
         //var file = "skull_256x256x256_uint8.raw";
         //var file = "foot_256x256x256_uint8.raw";
@@ -351,15 +370,18 @@ var VolumeRenderer = function(gl) {
             
             self.createVertexBuffer(gl, self.cubeStrip);
             self.createVolumeTexture16(gl);
-     
+            
+            self.createOpacityMap(gl);
+            self.createColorMap(gl);
+
             var longestAxis = Math.max(self.width, Math.max(self.height, self.slices));
             self.volScale = [
                 self.width / longestAxis, 
                 self.height / longestAxis,
                 self.slices / longestAxis];
             gl.uniform3iv(self.getUniformLocation("volume_dims"), [self.width, self.height, self.slices]);
-            gl.uniform1i(self.getUniformLocation("volume"), 0);
-            gl.uniform1f(self.getUniformLocation("dt_scale"), 0.5);
+            
+            this.setSampleRate(2.0);
 
             // spine
             gl.uniform1f(this.getUniformLocation("rescaleIntercept"), -1200);
