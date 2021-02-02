@@ -1,5 +1,6 @@
 var Viewport = function(canvas, fpsCallback) {
     this.lastDrawTime = performance.now() / 1000;
+    this.valid = false;
 
     this.gl = canvas.getContext("webgl2"),
     {
@@ -13,34 +14,35 @@ var Viewport = function(canvas, fpsCallback) {
     }
 
     this.renderers = [];
-
-    this.showFps = function() {
-        if (fpsCallback) {
-            this.nrFrames++;
-            var now = performance.now() / 1000;
-            var delta = now - this.lastDrawTime;
-            if (delta >= 1.0) {
-                var fps = this.nrFrames / delta;
-                fpsCallback(Math.round(fps) + ' f/s');
-                this.lastDrawTime = now;
-                this.nrFrames = 0;
-            }
-        }
+    this.invalidate = function() {
+        this.valid = false;
     }
 
     this.draw = function() {
         var self = this;
 
-        self.showFps();
+        var now = performance.now() / 1000;
 
-        self.gl.clearDepth(1.0);
-        self.gl.clearColor(0.0, 0.0, 0.0, 0.0);
-        self.gl.clear(self.gl.COLOR_BUFFER_BIT);
-    
-        this.renderers.forEach(renderer => {
-            renderer.draw(self.gl);
-        });
+        var delta = now - this.lastDrawTime;
+        if (delta >= 0.5) {
+            var fps = this.nrFrames / delta;
+            fpsCallback(Math.round(fps) + ' f/s');
+            this.lastDrawTime = now;
+            this.nrFrames = 0;
+        }
+
+        if (!self.valid) {
+            this.nrFrames++;
+
+            self.gl.clearDepth(1.0);
+            self.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+            self.gl.clear(self.gl.COLOR_BUFFER_BIT);
         
+            self.renderers.forEach(renderer => {
+                renderer.draw(self.gl);
+            });
+            self.valid = true;
+        }
         requestAnimationFrame(function() { self.draw();});
     };
 }
@@ -62,9 +64,6 @@ function main() {
         span.innerHTML = fps;
     });
 
-    var volume = new VolumeRenderer(viewport.gl);
-    viewport.renderers.push(volume);
-
     requestAnimationFrame(function() { viewport.draw(); });
 
     const labelWindowLevel = document.querySelector("#labelWindowLevel");
@@ -73,12 +72,14 @@ function main() {
         var value = parseFloat(e.target.value);
         labelWindowLevel.innerHTML = "Window level (" + e.target.value + ")";
         volume.setWindowLevel(parseFloat(value));
+        viewport.invalidate();
     });
 
     const widthSlider = document.querySelector("#widthSlider");
     widthSlider.addEventListener('input', function(e) {
         var value = e.target.value;
         volume.setWindowWidth(parseFloat(value));
+        viewport.invalidate();
     });
 
     const sliderSamplingRate = document.querySelector("#sliderSamplingRate");
@@ -92,6 +93,7 @@ function main() {
             case 3: labelSamplingRate.innerHTML = "Sampling rate (2x)"; volume.setSampleRate(2.0); break;
             case 4: labelSamplingRate.innerHTML = "Sampling rate (4x)"; volume.setSampleRate(4.0); break;
         }
+        viewport.invalidate();
     });
 
     canvas.addEventListener('mousedown', function(e) {
@@ -100,6 +102,7 @@ function main() {
             viewport.renderers.forEach(renderer => {
                 renderer.mouseDown(e);
             });
+            viewport.invalidate();
         }
     });
 
@@ -107,6 +110,7 @@ function main() {
         var e = window.event || e;
         viewport.renderers.forEach(renderer => {
             renderer.mouseMove(e);
+            viewport.invalidate();
         });
     });
 
@@ -115,6 +119,7 @@ function main() {
         if (e.button == 0) {
             viewport.renderers.forEach(renderer => {
                 renderer.mouseUp(e);
+                viewport.invalidate();
             });
         }
     });
@@ -122,6 +127,26 @@ function main() {
     canvas.addEventListener('wheel', function(e) {
         viewport.renderers.forEach(renderer => {
             renderer.mouseWheel(wheelDistance(e));
+            viewport.invalidate();
+        });
+    });
+
+    const dropDowns = document.querySelectorAll(".dropdown-item");
+    dropDowns.forEach(function(item) {
+        var self = this;
+        item.addEventListener('click', function(e) {
+            var fileUrl = item.getAttribute("data-url");
+            var slope = item.getAttribute("data-slope");
+            var intercept = item.getAttribute("data-intercept");
+            var width = item.getAttribute("data-width");
+            var height = item.getAttribute("data-height");
+            var length = item.getAttribute("data-length");
+            self.volume = new VolumeRenderer(viewport.gl, fileUrl, slope, intercept, width, height, length);
+            viewport.renderers = viewport.renderers.filter(function(value, index, arr){
+                return !(value instanceof VolumeRenderer);
+            });
+            viewport.renderers.push(volume);
+            console.log(item.innerHTML);
         });
     });
 
@@ -134,6 +159,7 @@ function main() {
 
         if (e.detail == 100) {
             progressPanel.style.visibility = 'hidden';
+            viewport.invalidate();
         }
     });
 }

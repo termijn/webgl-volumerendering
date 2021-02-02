@@ -33,7 +33,11 @@ var toHalfFloat = (function() {
     };
  }());
 
-var VolumeRenderer = function(gl) {
+var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, widthInMM, heightInMM, lengthInMM) {
+
+    this.widthInMM = parseFloat(widthInMM);
+    this.heightInMM = parseFloat(heightInMM);
+    this.lengthInMM = parseFloat(lengthInMM);
 
     this.loadVolume = function(url) {
         return new Promise((resolve, reject) => {
@@ -171,7 +175,7 @@ var VolumeRenderer = function(gl) {
         glMatrix.mat4.fromTranslation(translationToCenter, vec3.fromValues(-0.5, -0.5, -0.5));
 
         var scaling = glMatrix.mat4.create();
-        glMatrix.mat4.fromScaling(scaling, vec3.fromValues(150,150,150));
+        glMatrix.mat4.fromScaling(scaling, vec3.fromValues(this.widthInMM, this.heightInMM, this.lengthInMM));
         
         var modelToWorld = glMatrix.mat4.create();
         glMatrix.mat4.multiply(modelToWorld, translationToCenter, modelToWorld);
@@ -339,21 +343,12 @@ var VolumeRenderer = function(gl) {
         var vertexShaderPromise = shaderutils.loadShaderSource("volumerenderer.vert");
         var fragmentShaderPromise = shaderutils.loadShaderSource("volumerenderer.frag");
 
-        //var file = "engine_256x256x128_uint8.raw";
-        var file = "spine2_256x256x256_uint16.raw";
-        //var file = "spine2_256x256x256_uint16.raw";
-        //var file = "bonsai_256x256x256_uint8.raw";
-        //var file = "skull_256x256x256_uint8.raw";
-        //var file = "foot_256x256x256_uint8.raw";
-        //var file = "vertebra_512x512x512_uint16.raw";
-        //var file = "ct_512x512x448_uint16.raw";
-        
         var fileRegex = /.*_(\d+)x(\d+)x(\d+)_*.*/;
-        var m = file.match(fileRegex);
+        var m = fileUrl.match(fileRegex);
         var volumeDimensions = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
         this.fieldOfView = Math.PI / 180 * 90;
         
-        var loadVolumePromise = this.loadVolume(file);
+        var loadVolumePromise = this.loadVolume(fileUrl);
 
         Promise.all([vertexShaderPromise, fragmentShaderPromise, loadVolumePromise]).then((promises) => {
             self.vertexShader = promises[0];
@@ -384,12 +379,12 @@ var VolumeRenderer = function(gl) {
             this.setSampleRate(2.0);
 
             // spine
-            gl.uniform1f(this.getUniformLocation("rescaleIntercept"), -1200);
-            gl.uniform1f(this.getUniformLocation("rescaleSlope"), 0.06408789196612);
+            // gl.uniform1f(this.getUniformLocation("rescaleIntercept"), -1200);
+            // gl.uniform1f(this.getUniformLocation("rescaleSlope"), 0.06408789196612);
 
             // CT
-            // gl.uniform1f(this.getUniformLocation("rescaleIntercept"), -1024);
-            // gl.uniform1f(this.getUniformLocation("rescaleSlope"), 1);
+            gl.uniform1f(this.getUniformLocation("rescaleIntercept"), parseFloat(rescaleIntercept));
+            gl.uniform1f(this.getUniformLocation("rescaleSlope"), parseFloat(rescaleSlope));
 
             self.setWindowWidth(1048);
             self.setWindowLevel(0);

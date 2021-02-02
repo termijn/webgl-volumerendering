@@ -72,8 +72,8 @@ in vec3 vray_dir;
 in vec3 transformed_eye;
 out vec4 color;
 
-vec2 intersect_box(vec3 orig, vec3 dir);
-float linear_to_srgb(float x);
+float linearToSRGB(float x);
+vec2 intersectBox(vec3 orig, vec3 dir);
 vec3 normalAt(vec3 position);
 float traceLight(vec3 voxel, vec3 light);
 float softShadow(vec3 position);
@@ -142,7 +142,7 @@ float wang_hash(int seed) {
 
 void main(void) {
     vec3 ray_dir = normalize(vray_dir);
-    vec2 t_hit = intersect_box(transformed_eye, ray_dir);
+    vec2 t_hit = intersectBox(transformed_eye, ray_dir);
     if (t_hit.x > t_hit.y) {
         discard;
     }
@@ -171,10 +171,10 @@ void main(void) {
         p += ray_dir * dt;
     }
 
-    vec4 diffuse = vec4(0.5);
+    vec4 diffuse = vec4(0.7);
     vec4 ambient = vec4(0.4);
     vec4 specular = vec4(1.0);
-    float shininess = 128.0;
+    float shininess = 16.0;
 
     vec3 voxelNormal = normalAt(p);
     vec3 lightDirection = normalize(p - lightPosition);
@@ -186,16 +186,15 @@ void main(void) {
         spec = specular * pow(intSpec, shininess);
     }
 
-
     float shadow = 1.0;
     if (voxelColor.a >= 0.50) {
         shadow = softShadow(p);
     }
-    vec4 lightColor = max(intensity * diffuse + spec, ambient) * shadow;
+    vec4 lightColor = max(intensity * diffuse + spec, ambient);
 
-    color.r = linear_to_srgb((voxelColor.r * lightColor.r));
-    color.g = linear_to_srgb((voxelColor.g * lightColor.g));
-    color.b = linear_to_srgb((voxelColor.b * lightColor.b));
+    color.r = linearToSRGB((voxelColor.r * lightColor.r * shadow));
+    color.g = linearToSRGB((voxelColor.g * lightColor.g * shadow));
+    color.b = linearToSRGB((voxelColor.b * lightColor.b * shadow));
     color.a = voxelColor.a;
 }
 
@@ -267,7 +266,7 @@ vec3 normalAt(vec3 position) {
     vec3 gradient = vec3(
         (sampleVolumeOpacity(position + vec3(voxelSize.x, 0, 0)) - sampleVolumeOpacity(position - vec3(voxelSize.x, 0, 0))) / 2.0,
         (sampleVolumeOpacity(position + vec3(0, voxelSize.y, 0)) - sampleVolumeOpacity(position - vec3(0, voxelSize.y, 0))) / 2.0,
-        (sampleVolumeOpacity(position + vec3(0, 0, voxelSize.z)) - sampleVolumeOpacity(position - vec3(0, 0, voxelSize.z)))
+        (sampleVolumeOpacity(position + vec3(0, 0, voxelSize.z)) - sampleVolumeOpacity(position - vec3(0, 0, voxelSize.z))) / 2.0
     );
     return normalize(gradient);
 }
@@ -278,7 +277,7 @@ float traceLight(vec3 voxel, vec3 light) {
     vec3 d = normalize(voxelToLight);
     vec3 o = voxel - 1000.0 * d;
 
-    vec2 box = intersect_box(o, d);
+    vec2 box = intersectBox(o, d);
     float start = length(voxel - o);
 
     vec3 voxelSize = 1.0 / vec3(volume_dims);
@@ -290,7 +289,7 @@ float traceLight(vec3 voxel, vec3 light) {
         vec3 p = o + t * d;
         float val = sampleVolumeOpacity(p);
 
-        integrated = integrated + val / samplesPerVoxel / 8.0;
+        integrated = integrated + val / samplesPerVoxel / 6.0;
 
         if (integrated > 0.75) {
             break;
@@ -299,14 +298,14 @@ float traceLight(vec3 voxel, vec3 light) {
     return clamp(integrated, 0.0, 1.0);
 }
 
-float linear_to_srgb(float x) {
+float linearToSRGB(float x) {
     if (x <= 0.0031308f) {
         return 12.92f * x;
     }
     return 1.055f * pow(x, 1.f / 2.4f) - 0.055f;
 }
 
-vec2 intersect_box(vec3 orig, vec3 dir) {
+vec2 intersectBox(vec3 orig, vec3 dir) {
     const vec3 boxMin = vec3(0);
     const vec3 boxMax = vec3(1);
     vec3 invDir = 1.0 / dir;
