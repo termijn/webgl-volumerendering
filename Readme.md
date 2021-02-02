@@ -6,3 +6,4 @@ The repository contains contains a WebGL 2.0 based interactive voxel volume rend
 ![](Images/volume-screenshot-2.png)
 ![](Images/volume-screenshot-3.png)
 ![](Images/volume-screenshot-4.png)
+![](Images/volume-screenshot-5.png)
