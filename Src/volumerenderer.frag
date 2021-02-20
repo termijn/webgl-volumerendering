@@ -25,48 +25,6 @@ uniform highp sampler2D opacityMapSamples;
 uniform int numberOfColorSamples;
 uniform highp sampler2D colorMapPositions;
 uniform highp sampler2D colorMapSamples;
-float colorSamplePoints[] =
-    float[9] (
-        -770.0,
-        -144.0,
-        62.0,
-        158.0,
-        210.0,
-        259.0,
-        466.0,
-        2001.0,
-        3071.0
-    );
-
-vec3 colorSamples[] =
-    vec3[9] (
-        vec3(0.79, 0.88, 0.82),
-        vec3(1.0, 0.78, 0.7),
-        vec3(0.73, 0.0, 0.03),
-        vec3(1.0, 0.14, 0.17),
-        vec3(1.0, 0.35, 0.17),
-        vec3(1.0, 0.64, 0.11),
-        vec3(0.94, 0.92, 0.73),
-        vec3(1.0, 1.0, 1.0),
-        vec3(1.0, 0.96, 0.99)
-    );
-
-float opacitySamplePoints[] = 
-    float[4] (
-        40.0,
-        128.0,
-        330.0,
-        299.0
-    );
-
-float opacitySamples[] = 
-    float[4] (
-        0.0,
-        0.14027,
-        0.38847,
-        0.93663
-    );
-
 
 in vec3 vray_dir;
 in vec3 transformed_eye;
@@ -84,10 +42,9 @@ float opacity(float value);
 float applyOpacityMap(float value);
 
 float colorMapPosition(int index) {
-    return colorSamplePoints[index];
-    // float sampleSize = 1.0 / float(numberOfColorSamples);
-    // float halfSize = sampleSize / 2.0;
-    // return texture(colorMapPositions, vec2(float(index) * sampleSize + halfSize, 0.5)).r;
+    float sampleSize = 1.0 / float(numberOfColorSamples);
+    float halfSize = sampleSize / 2.0;
+    return texture(colorMapPositions, vec2(float(index) * sampleSize + halfSize, 0.5)).r;
 }
 
 vec3 colorMapSample(int index) {
@@ -97,17 +54,15 @@ vec3 colorMapSample(int index) {
 }
 
 float opacityMapPosition(int index) {
-    return opacitySamplePoints[index];
-    // float sampleSize = 1.0 / float(numberOfOpacitySamples);
-    // float halfSize = sampleSize / 2.0;
-    // return texture(opacityMapPositions, vec2(float(index) * sampleSize + halfSize, 0.5)).r;
+    float sampleSize = 1.0 / float(numberOfOpacitySamples);
+    float halfSize = sampleSize / 2.0;
+    return texture(opacityMapPositions, vec2(float(index) * sampleSize + halfSize, 0.5)).r;
 }
 
 float opacityMapSample(int index) {
-    return opacitySamples[index];
-    // float sampleSize = 1.0 / float(numberOfOpacitySamples);
-    // float halfSize = sampleSize / 2.0;
-    // return texture(opacityMapSamples, vec2(float(index) * sampleSize + halfSize, 0.5)).r;
+    float sampleSize = 1.0 / float(numberOfOpacitySamples);
+    float halfSize = sampleSize / 2.0;
+    return texture(opacityMapSamples, vec2(float(index) * sampleSize + halfSize, 0.5)).r;
 }
 
 float sampleVolume(vec3 position) {
@@ -125,7 +80,6 @@ float rescale(float value) {
 
 float opacity(float value) {
     float opacity = applyOpacityMap(value);
-
     float windowFloor = windowLevel - windowWidth / 2.0;
     return clamp(opacity * ((value - windowFloor) / windowWidth), 0.0, 1.0);
 }
@@ -171,10 +125,10 @@ void main(void) {
         p += ray_dir * dt;
     }
 
-    vec4 diffuse = vec4(0.7);
+    vec4 diffuse = vec4(0.6);
     vec4 ambient = vec4(0.4);
-    vec4 specular = vec4(1.0);
-    float shininess = 16.0;
+    vec4 specular = vec4(0.5);
+    float shininess = 8.0;
 
     vec3 voxelNormal = normalAt(p);
     vec3 lightDirection = normalize(p - lightPosition);
@@ -187,14 +141,14 @@ void main(void) {
     }
 
     float shadow = 1.0;
-    if (voxelColor.a >= 0.50) {
-        shadow = softShadow(p);
+    if (voxelColor.a >= 0.20) {
+        shadow = clamp(softShadow(p) * 2.0 + 0.1, 0.0, 1.0);
     }
-    vec4 lightColor = max(intensity * diffuse + spec, ambient);
+    vec4 lightColor = shadow * max(intensity * diffuse + spec, ambient);
 
-    color.r = linearToSRGB((voxelColor.r * lightColor.r * shadow));
-    color.g = linearToSRGB((voxelColor.g * lightColor.g * shadow));
-    color.b = linearToSRGB((voxelColor.b * lightColor.b * shadow));
+    color.r = linearToSRGB((voxelColor.r * lightColor.r));
+    color.g = linearToSRGB((voxelColor.g * lightColor.g));
+    color.b = linearToSRGB((voxelColor.b * lightColor.b));
     color.a = voxelColor.a;
 }
 
@@ -206,7 +160,7 @@ float applyOpacityMap(float value) {
             }
             int prevIndex = i - 1;
             float delta = opacityMapPosition(i) - opacityMapPosition(prevIndex);
-            float fraction = (value - opacityMapPosition(prevIndex)) / delta;
+            float fraction = (value - opacityMapPosition(prevIndex)) / delta;            
             float color = mix(opacityMapSample(prevIndex), opacityMapSample(i), fraction);
             return color;
         }
@@ -224,12 +178,12 @@ vec3 applyColorMap(float value) {
             int prevIndex = i - 1;
             float previousColorMapPosition = colorMapPosition(prevIndex);
             float delta = currentColorMapPosition - previousColorMapPosition;
-            float fraction = (value - previousColorMapPosition) / delta;
-            vec3 color = mix(colorSamples[prevIndex], colorSamples[i], fraction);
+            vec3 fraction = vec3((value - previousColorMapPosition) / delta);
+            vec3 color = mix(colorMapSample(prevIndex), colorMapSample(i), fraction);
             return color;
         }
     }
-    return colorSamples[colorSamples.length()-1];
+    return colorMapSample(numberOfColorSamples - 1);
 }
 
 float pointlightShadow(vec3 p) {
@@ -238,11 +192,12 @@ float pointlightShadow(vec3 p) {
 }
 
 float softShadow(vec3 p) {
-    float shadow = 0.0;
     float totalShadow = 0.0;
-    float delta = 0.01;
+    vec3 voxelSize = 1.0 / vec3(volume_dims);
+    
+    float delta = min(voxelSize.x, min(voxelSize.y, voxelSize.z)) * 2.0;
     vec3 minPos = p - vec3(delta);
-
+    
     for (float z = -delta; z < delta; z += delta) {
         for (float y = -delta; y < delta; y += delta) {
             for (float x = -delta; x < delta; x += delta) {
@@ -251,22 +206,18 @@ float softShadow(vec3 p) {
                 totalShadow = totalShadow + pointShadow;
             }
         }
-    }    
-    shadow = totalShadow / 6.0;
+    }
+    float shadow = totalShadow / 8.0;
     return shadow;
 }
 
 vec3 normalAt(vec3 position) {
-    vec3 voxelSize = vec3(
-        1.0 / float(volume_dims.x) * 2.0,
-        1.0 / float(volume_dims.y) * 2.0,
-        1.0 / float(volume_dims.z) * 2.0
-    );
+    vec3 voxelSize = 1.0 / vec3(volume_dims);
 
     vec3 gradient = vec3(
-        (sampleVolumeOpacity(position + vec3(voxelSize.x, 0, 0)) - sampleVolumeOpacity(position - vec3(voxelSize.x, 0, 0))) / 2.0,
-        (sampleVolumeOpacity(position + vec3(0, voxelSize.y, 0)) - sampleVolumeOpacity(position - vec3(0, voxelSize.y, 0))) / 2.0,
-        (sampleVolumeOpacity(position + vec3(0, 0, voxelSize.z)) - sampleVolumeOpacity(position - vec3(0, 0, voxelSize.z))) / 2.0
+        (sampleVolumeOpacity(position + vec3(voxelSize.x, 0, 0)) - sampleVolumeOpacity(position - vec3(voxelSize.x, 0, 0))) * (1.0 / (2.0 * voxelSize.x)),
+        (sampleVolumeOpacity(position + vec3(0, voxelSize.y, 0)) - sampleVolumeOpacity(position - vec3(0, voxelSize.y, 0))) * (1.0 / (2.0 * voxelSize.y)),
+        (sampleVolumeOpacity(position + vec3(0, 0, voxelSize.z)) - sampleVolumeOpacity(position - vec3(0, 0, voxelSize.z))) * (1.0 / (2.0 * voxelSize.z))
     );
     return normalize(gradient);
 }
@@ -282,16 +233,15 @@ float traceLight(vec3 voxel, vec3 light) {
 
     vec3 voxelSize = 1.0 / vec3(volume_dims);
     float samplesPerVoxel = 1.0;
-    float delta = min(voxelSize.x, min(voxelSize.y, voxelSize.z)) / samplesPerVoxel * 2.0;
+    float delta = min(voxelSize.x, min(voxelSize.y, voxelSize.z)) / samplesPerVoxel;
 
     float integrated = 0.0;
     for (float t = start; t < box.y; t += delta) {
         vec3 p = o + t * d;
         float val = sampleVolumeOpacity(p);
+        integrated = integrated + val / samplesPerVoxel / 4.0;
 
-        integrated = integrated + val / samplesPerVoxel / 6.0;
-
-        if (integrated > 0.75) {
+        if (integrated > 0.95) {
             break;
         }
     }

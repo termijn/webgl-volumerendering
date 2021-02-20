@@ -3,39 +3,81 @@
     <head>
         <title>Volume rendering using WebGL</title>
 
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
         <link rel="preconnect" href="https://fonts.gstatic.com">
         <link href="https://fonts.googleapis.com/css2?family=Noto+Serif&display=swap" rel="stylesheet">
 
         <link href="bootstrap/css/bootstrap.min.css" rel="stylesheet" >
         <link rel="stylesheet" href="style.css"></link>
+        <link rel="stylesheet" href="opacitymap/style.css"></link>
 
         <script src="gl-matrix-min.js"></script>
         <script src="volumerenderer.js"></script>
         <script src="shaderutils.js"></script>
+        <script src="math.js"></script>
+        <script src="window.js"></script>
         <script src="viewport.js"></script>
+        <script src="opacitymap/opacitymap.js"></script>
+        <script src="app.js"></script>
     </head>
 
     <body>
-        <canvas id="viewport" width="1200" height="1200"></canvas>
+        <div id="datasetselector">
+            <div class="list-group" id="list-tab" role="tablist">
+                <a class="list-group-item list-group-item-action dataset-thumbnail" id="list-lumbar" data-bs-toggle="list" role="tab"
+                    data-url="datasets/spine2_256x256x256_uint16.raw" data-intercept="-1200" data-slope="0.06408789196612" data-width="200" data-height="200" data-length="200">
+                    <div>
+                        <img class="rounded" src="datasets/spine2_256x256x256_uint16.png" /> 
+                        <div class="text-center">Lumbar CBCT</div>
+                    </div>
+                </a>
+                <a class="list-group-item list-group-item-action dataset-thumbnail" id="list-lumbar" data-bs-toggle="list" href="#list-home" role="tab"
+                    data-url="datasets/spine_256x256x256_uint16.raw" data-intercept="-1200" data-slope="0.06408789196612" data-width="200" data-height="200" data-length="200">
+                    <div>
+                        <img class="rounded" src="datasets/spine_256x256x256_uint16.png" /> 
+                        <div class="text-center">Thoracic CBCT</div>
+                    </div>
+                </a>
+                <a class="list-group-item list-group-item-action dataset-thumbnail" id="list-lumbar" data-bs-toggle="list" href="#list-home" role="tab"
+                    data-url="datasets/spine3_256x256x256_uint16.raw" data-intercept="-1200" data-slope="0.06408789196612" data-width="200" data-height="200" data-length="200">
+                    <div>
+                        <img class="rounded" src="datasets/spine3_256x256x256_uint16.png" /> 
+                        <div class="text-center">Cervical CBCT</div>
+                    </div>
+                </a>
+
+                <a class="list-group-item list-group-item-action dataset-thumbnail" id="list-lumbar" data-bs-toggle="list" href="#list-home" role="tab"
+                    data-url="datasets/ct_512x512x448_uint16.raw" data-intercept="-1024" data-slope="1" data-width="75" data-height="75" data-length="250">
+                    <div>
+                        <img class="rounded" src="datasets/ct_512x512x448_uint16.png" /> 
+                        <div class="text-center">Full Body CT</div>
+                    </div>
+                </a>
+
+                <a class="list-group-item list-group-item-action dataset-thumbnail" id="list-lumbar" data-bs-toggle="list" href="#list-home" role="tab"
+                    data-url="datasets/skull_512x512x234_uint16.raw" data-intercept="-1024" data-slope="1" data-width="600" data-height="600" data-length="300">
+                    <div>
+                        <img class="rounded" src="datasets/skull_512x512x234_uint16.png" /> 
+                        <div class="text-center">Skull CT</div>
+                    </div>
+                </a>
+
+                <a class="list-group-item list-group-item-action dataset-thumbnail" data-bs-toggle="list" role="tab"
+                    data-url="datasets/vertebroplasty_512x393x512_uint16.raw" data-intercept="-1200" data-slope="0.06408789196612" data-width="200" data-height="200" data-length="200">
+                    <div>
+                        <img class="rounded" src="datasets/skull_512x512x234_uint16.png" /> 
+                        <div class="text-center">Vertebroplasty CT</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <canvas id="viewport" width="1024" height="1024" class="vw-100 vh-100"></canvas>
+
         <div id="labelFps"></div>
 
-        <div id="title_background" class="title"></div>
         <div id="title_text" class="title">
             <h1>Volumizer</h1>
-
-            <div class="dropdown">
-                <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
-                  Datasets
-                </button>
-                <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                  <li><a class="dropdown-item" data-url="/datasets/spine2_256x256x256_uint16.raw" data-intercept="-1200" data-slope="0.06408789196612" data-width="200" data-height="200" data-length="200" href="#">Lumbar CBCT</a></li>
-                  <li><a class="dropdown-item" data-url="/datasets/spine_256x256x256_uint16.raw" data-intercept="-1200" data-slope="0.06408789196612" data-width="200" data-height="200" data-length="200" href="#">Thoracic CBCT</a></li>
-                  <li><a class="dropdown-item" data-url="/datasets/spine3_256x256x256_uint16.raw" data-intercept="-1200" data-slope="0.06408789196612" data-width="200" data-height="200" data-length="200" href="#">Cervical CBCT</a></li>
-                  <li><a class="dropdown-item" data-url="/datasets/ct_512x512x448_uint16.raw" data-intercept="-1024" data-slope="1" data-width="75" data-height="75" data-length="250" href="#">Full Body CT</a></li>
-                  <li><a class="dropdown-item" data-url="/datasets/skull_512x512x234_uint16.raw" data-intercept="-1024" data-slope="1" data-width="300" data-height="300" data-length="150" href="#">Skull</a></li>
-                  
-                </ul>
-            </div>
 
             <div>
                 <label for="offsetSlider" class="form-label" id="labelWindowLevel">Window Level</label>
@@ -47,12 +89,32 @@
             </div>
             <div>
                 <label for="sliderSamplingRate" class="form-label" id="labelSamplingRate">Sampling rate (2x)</label>
-                <input type="range" class="form-range" id="sliderSamplingRate" min="0" max="4" step="1" value="3">
+                <input type="range" class="form-range" id="sliderSamplingRate" min="0" max="5" step="1" value="3">
             </div>
-
+            <div>
+                <label for="resolutionSlider" class="form-label" id="labelResolution">Resolution</label>
+                <input type="range" class="form-range" id="resolutionSlider" min="0" max="5" step="1">
+            </div>
+            <div>
+                <input class="form-check-input" type="checkbox" value="" checked="" id="checkboxAdaptiveResolution">
+                <label for="checkboxAdaptiveResolution" class="form-check-label">Adaptive resolution</label>
+            </div>
+            <div>
+                <button type="button" class="btn btn-primary" id="buttonOpacityMap">Opacity map...</button>
+            </div>
         </div>
+
         <div class="progress">
-            <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">Loading dataset</div>
+            <div class="progress-bar bg-info" role="progressbar" style="width: 50%;" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+
+        <div id="windowOpacityMap">
+            <div id="windowOpacityMapHeader">Edit Opacity Map
+                <button type="button" class="btn btn-primary">X</button>
+            </div>
+            <div id="opacityMapEditor">
+                <canvas></canvas>
+            </div>
         </div>
 
         <script src="bootstrap/js/bootstrap.bundle.min.js"></script>

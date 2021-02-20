@@ -86,9 +86,8 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
     }
 
     this.mouseMove = function(e) {
-
         if (!this.isMouseDragging) return;
-        
+
         var delta = { x: e.clientX - this.startPosition.x, y: e.clientY - this.startPosition.y };
 
         var cameraToModel = mat4.create();
@@ -125,7 +124,6 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
     }
 
     this.mouseWheel = function(distance) {
-        
         this.fieldOfView = Math.min(Math.PI / 180 * 120, Math.max(Math.PI / 180 * 5, this.fieldOfView * Math.pow(2, -distance / 10.0)));
     }
 
@@ -164,7 +162,7 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
         if (!this.loaded) {
             return;
         }
-
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         gl.useProgram(this.shaderProgram);
         gl.enable(gl.CULL_FACE);
         gl.cullFace(gl.FRONT);
@@ -214,7 +212,7 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
         gl.uniformMatrix4fv(this.getUniformLocation("cameraToWorld"), false, this.cameraToWorld);
         gl.uniformMatrix4fv(this.getUniformLocation("clipSpaceToCamera"), false, clipSpaceToCamera);
 
-        var lightInCameraSpace = vec3.fromValues(300.0,300.0,300.0);
+        var lightInCameraSpace = vec3.fromValues(100.0,100.0,100.0);
         var lightInModelSpace = vec3.create();
         vec3.transformMat4(lightInModelSpace, lightInCameraSpace, this.cameraToWorld);
         vec3.transformMat4(lightInModelSpace, lightInModelSpace, this.worldToModel);
@@ -235,7 +233,6 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
     this.setWindowWidth = function(value) {
         gl.uniform1f(this.getUniformLocation("windowWidth"), value);
     }
-
 
     this.createTexture1D = function(gl, textureId, values) {
         gl.useProgram(this.shaderProgram);
@@ -289,8 +286,21 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
         gl.uniform1i(this.getUniformLocation("volume"), 0);
     }
 
-    this.createOpacityMap = function(gl) {
-        var positions = new Float32Array([40, 128, 330, 299]);
+    // opacityMap: [{position, opacity}]
+    this.setOpacityMap = function(opacityMap) {
+        var positions = new Float32Array(opacityMap.length);
+        var samples = new Float32Array(opacityMap.length);
+
+        opacityMap.forEach((element, index) => {
+            positions[index] = element.position;
+            samples[index] = element.opacity;
+        });
+        this.createOpacityPositionsTexture(gl, positions);
+        this.createOpacitySamplesTexture(gl, samples);
+    }
+
+    this.createOpacityMap = function() {
+        var positions = new Float32Array([90, 228, 330, 499]);
         this.createOpacityPositionsTexture(gl, positions);
 
         var opacitySamples = new Float32Array([0, 0.14027,0.38847, 0.93663]);
@@ -302,7 +312,7 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
         var texture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE4);
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16F, colors.length, 1);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16F, colors.length / 3, 1);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
@@ -366,7 +376,7 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
             self.createVertexBuffer(gl, self.cubeStrip);
             self.createVolumeTexture16(gl);
             
-            self.createOpacityMap(gl);
+            self.createOpacityMap();
             self.createColorMap(gl);
 
             var longestAxis = Math.max(self.width, Math.max(self.height, self.slices));
@@ -378,11 +388,6 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
             
             this.setSampleRate(2.0);
 
-            // spine
-            // gl.uniform1f(this.getUniformLocation("rescaleIntercept"), -1200);
-            // gl.uniform1f(this.getUniformLocation("rescaleSlope"), 0.06408789196612);
-
-            // CT
             gl.uniform1f(this.getUniformLocation("rescaleIntercept"), parseFloat(rescaleIntercept));
             gl.uniform1f(this.getUniformLocation("rescaleSlope"), parseFloat(rescaleSlope));
 

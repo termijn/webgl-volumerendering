@@ -34,6 +34,7 @@ var shaderutils = {
       return new Promise((resolve, reject) => {
         var request = new XMLHttpRequest();
         request.open('GET', url, true);
+        request.setRequestHeader('Cache-Control', 'no-cache');
         request.addEventListener('load', function() {
           resolve(request.responseText);
         });

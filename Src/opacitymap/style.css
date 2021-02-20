@@ -1,0 +1,56 @@
+#windowOpacityMap {
+    position: absolute;
+    z-index: 9;
+    background-color: #333;
+    border: 1px solid #555;
+    text-align: center;
+    height: 300px;
+    width: 500px;
+    border-radius: 5px;
+    opacity: 0.9;
+    visibility: hidden;
+}
+
+#opacityMapEditor > canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.opacitySample {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background-color: #2196F3;
+    cursor: grab;
+}
+
+.opacityValue {
+    margin: 40px;
+    white-space: nowrap;
+}
+
+#windowOpacityMapHeader {
+    padding: 10px;
+    cursor: move;
+    z-index: 10;
+    background-color: #2196F3;
+    color: #fff;
+    text-align: left;
+}
+
+#opacityMapEditor {
+    position: absolute;
+    background-color: #555;
+
+    left: 10px;
+    right: 10px;
+    top: 55px;
+    bottom: 10px;
+}
+
+#windowOpacityMapHeader > button {
+    position: absolute;
+    right: 6px;
+    top: 6px;
+}
