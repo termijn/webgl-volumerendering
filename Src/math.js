@@ -15,6 +15,10 @@ function Point(x, y) {
     this.len = function() {
         return Math.sqrt(this.x * this.x + this.y + this.y);
     }
+
+    this.inverse = function() {
+        return new Point(-this.x, -this.y);
+    }
 }
 
 function subtract(p1, p2) {

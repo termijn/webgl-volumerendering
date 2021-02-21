@@ -1,21 +1,7 @@
+var vec3 = glMatrix.vec3;
+var mat4 = glMatrix.mat4;
+
 var Viewport = function(canvas, fpsCallback) {
-    this.canvas = canvas;
-    this.lastDrawTime = performance.now() / 1000;
-    this.valid = false;
-    this.maxResolution = 4;
-    this.adaptiveResolution = true;
-    this.renderers = [];
-
-    this.gl = canvas.getContext("webgl2", {preserveDrawingBuffer: true}),
-    {
-      width,
-      height
-    } = canvas.getBoundingClientRect();
-
-    if (this.gl === null) {
-        alert("Unable to initialize WebGL 2. Your browser or machine may not support it.");
-        return;
-    }
 
     this.setAdaptiveResolution = function(isEnabled) {
         this.adaptiveResolution = isEnabled;
@@ -44,6 +30,27 @@ var Viewport = function(canvas, fpsCallback) {
             case 4: this.setViewportSize(1600, 1600); break;
         }
         this.currentResolutionLevel = level;
+        this.invalidate();
+    }
+
+    this.resize = function() {
+        this.setFieldOfView(this.fieldOfView);
+        this.invalidate();
+    }
+
+    this.setFieldOfView = function(angleInRadians) {
+        this.fieldOfView = angleInRadians;
+        this.projectionMatrix = glMatrix.mat4.create();
+        const aspect = this.gl.canvas.clientWidth / this.gl.canvas.clientHeight;
+        const zNear = 1;
+        const zFar = -400;
+
+        glMatrix.mat4.perspective(
+            this.projectionMatrix,
+            angleInRadians,
+            aspect,
+            zNear,
+            zFar);
         this.invalidate();
     }
 
@@ -88,7 +95,6 @@ var Viewport = function(canvas, fpsCallback) {
             self.render();
             self.valid = true;
         }
-        
         requestAnimationFrame(function() { self.draw();});
     };
 
@@ -98,8 +104,33 @@ var Viewport = function(canvas, fpsCallback) {
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
     
         this.renderers.forEach(renderer => {
-            renderer.draw(this.gl);
+            renderer.draw(this);
         });
     }
+
+    this.setCamera
+
+    this.canvas = canvas;
+    this.lastDrawTime = performance.now() / 1000;
+    this.valid = false;
+    this.maxResolution = 4;
+    this.adaptiveResolution = true;
+    this.renderers = [];
+
+    this.gl = canvas.getContext("webgl2", {preserveDrawingBuffer: true}),
+    {
+      width,
+      height
+    } = canvas.getBoundingClientRect();
+
+    if (this.gl === null) {
+        alert("Unable to initialize WebGL 2. Your browser or machine may not support it.");
+        return;
+    }
+
+    this.cameraToWorld = glMatrix.mat4.create();
+    glMatrix.mat4.translate(this.cameraToWorld, this.cameraToWorld, vec3.fromValues(0, 0, 300));
+
+    this.setFieldOfView(Math.PI / 180 * 90);
     this.setResolution(2);
 }

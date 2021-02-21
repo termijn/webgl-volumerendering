@@ -80,53 +80,6 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
         return newVector;
     }
 
-    this.mouseDown = function(args) {
-        this.isMouseDragging = true;
-        this.startPosition = args.position;
-    }
-
-    this.mouseMove = function(args) {
-        if (!args.isMouseDown) return;
-        
-        var delta = args.position.subtract(this.startPosition);
-
-        var cameraToModel = mat4.create();
-        mat4.multiply(cameraToModel, this.worldToModel, this.cameraToWorld);
-
-        var xRay = vec3.fromValues(1,0,0);
-        var xRayO = vec3.fromValues(0,0,0);
-        vec3.transformMat4(xRay, xRay, cameraToModel);
-        vec3.transformMat4(xRayO, xRayO, cameraToModel);
-        vec3.subtract(xRay, xRay, xRayO);
-
-        var yRay = vec3.fromValues(0,1,0);
-        var yRayO = vec3.fromValues(0,0,0);
-        vec3.transformMat4(yRay, yRay, cameraToModel);
-        vec3.transformMat4(yRayO, yRayO, cameraToModel);
-        vec3.subtract(yRay, yRay, yRayO);
-
-        glMatrix.mat4.rotate(
-            this.rotation,
-            this.rotation,
-            delta.y * 0.007,
-            xRay);
-        glMatrix.mat4.rotate(
-            this.rotation,
-            this.rotation,
-            delta.x * 0.007,
-            yRay);
-
-        this.startPosition = args.position;
-    }
-
-    this.mouseUp = function(e) {
-        this.isMouseDragging = false;
-    }
-
-    this.mouseWheel = function(args) {
-        this.fieldOfView = Math.min(Math.PI / 180 * 120, Math.max(Math.PI / 180 * 5, this.fieldOfView * Math.pow(2, -args.wheelDistance / 10.0)));
-    }
-
     this.createCubeStrip = function() {
         return [
             1, 1, 0,
@@ -158,7 +111,7 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
     }
 
-    this.draw = function() {
+    this.draw = function(viewport) {
         if (!this.loaded) {
             return;
         }
@@ -174,48 +127,33 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
 
         var scaling = glMatrix.mat4.create();
         glMatrix.mat4.fromScaling(scaling, vec3.fromValues(this.widthInMM, this.heightInMM, this.lengthInMM));
-        
+
         var modelToWorld = glMatrix.mat4.create();
         glMatrix.mat4.multiply(modelToWorld, translationToCenter, modelToWorld);
         glMatrix.mat4.multiply(modelToWorld, scaling, modelToWorld);
         glMatrix.mat4.multiply(modelToWorld, this.rotation, modelToWorld);
 
         var worldToCamera = glMatrix.mat4.create();
-        glMatrix.mat4.translate(worldToCamera, worldToCamera, vec3.fromValues(0,0,-300));
-
-        var projectionMatrix = glMatrix.mat4.create();
-        const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-        const zNear = 1;
-        const zFar = -400;
-
-        glMatrix.mat4.perspective(
-            projectionMatrix,
-            this.fieldOfView,
-            aspect,
-            zNear,
-            zFar);
+        glMatrix.mat4.invert(worldToCamera, viewport.cameraToWorld);
 
         gl.uniformMatrix4fv(this.getUniformLocation("modelToWorld"), false, modelToWorld);
         gl.uniformMatrix4fv(this.getUniformLocation("worldToCamera"), false, worldToCamera);
-        gl.uniformMatrix4fv(this.getUniformLocation("cameraToClipSpace"), false, projectionMatrix);
+        gl.uniformMatrix4fv(this.getUniformLocation("cameraToClipSpace"), false, viewport.projectionMatrix);
 
-        this.worldToModel = glMatrix.mat4.create();
-        glMatrix.mat4.invert(this.worldToModel, modelToWorld);
-
-        this.cameraToWorld = glMatrix.mat4.create();
-        glMatrix.mat4.invert(this.cameraToWorld, worldToCamera);
+        var worldToModel = glMatrix.mat4.create();
+        glMatrix.mat4.invert(worldToModel, modelToWorld);
 
         var clipSpaceToCamera = glMatrix.mat4.create();
-        glMatrix.mat4.invert(clipSpaceToCamera, projectionMatrix);
+        glMatrix.mat4.invert(clipSpaceToCamera, viewport.projectionMatrix);
 
-        gl.uniformMatrix4fv(this.getUniformLocation("worldToModel"), false, this.worldToModel);
-        gl.uniformMatrix4fv(this.getUniformLocation("cameraToWorld"), false, this.cameraToWorld);
+        gl.uniformMatrix4fv(this.getUniformLocation("worldToModel"), false, worldToModel);
+        gl.uniformMatrix4fv(this.getUniformLocation("cameraToWorld"), false, viewport.cameraToWorld);
         gl.uniformMatrix4fv(this.getUniformLocation("clipSpaceToCamera"), false, clipSpaceToCamera);
 
         var lightInCameraSpace = vec3.fromValues(100.0,100.0,100.0);
         var lightInModelSpace = vec3.create();
-        vec3.transformMat4(lightInModelSpace, lightInCameraSpace, this.cameraToWorld);
-        vec3.transformMat4(lightInModelSpace, lightInModelSpace, this.worldToModel);
+        vec3.transformMat4(lightInModelSpace, lightInCameraSpace, viewport.cameraToWorld);
+        vec3.transformMat4(lightInModelSpace, lightInModelSpace, worldToModel);
         gl.uniform3fv(this.getUniformLocation("lightPosition"), [lightInModelSpace[0], lightInModelSpace[1], lightInModelSpace[2]]);
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.cubeStrip.length/3);
@@ -356,8 +294,6 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
         var fileRegex = /.*_(\d+)x(\d+)x(\d+)_*.*/;
         var m = fileUrl.match(fileRegex);
         var volumeDimensions = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
-        this.fieldOfView = Math.PI / 180 * 90;
-        
         var loadVolumePromise = this.loadVolume(fileUrl);
 
         Promise.all([vertexShaderPromise, fragmentShaderPromise, loadVolumePromise]).then((promises) => {

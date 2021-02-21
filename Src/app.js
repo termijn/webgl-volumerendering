@@ -15,7 +15,7 @@ function load() {
     viewport.start();
 
     window.onresize = function() {
-        viewport.invalidate();
+        viewport.resize();
     };
 
     const sliderResolution = document.querySelector("#resolutionSlider");

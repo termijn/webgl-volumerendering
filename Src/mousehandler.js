@@ -13,7 +13,10 @@ function wheelDistance(evt) {
 };
 
 function MouseHandler(viewport) {
+    this.interactions = [new ViewportZoom(), new CameraRoll()];
+
     this.subscribe = function() {
+        var self = this;
         viewport.canvas.addEventListener('mousedown', function(e) {
             e.preventDefault ();
             var e = window.event || e;
@@ -26,8 +29,10 @@ function MouseHandler(viewport) {
 
             if (args.button == LEFTMOUSEBUTTON) {
                 this.isMouseDown = true;
-                viewport.renderers.forEach(renderer => {
-                    renderer.mouseDown(args);
+
+                self.interactions.forEach(interaction => {
+                    if (interaction.mouseDown) interaction.mouseDown(args);
+                    viewport.setMaxResolution(1);
                 });
                 viewport.setMaxResolution(1);
                 viewport.invalidate();
@@ -40,11 +45,12 @@ function MouseHandler(viewport) {
             const args = {
                 position: new Point(e.clientX, e.clientY),
                 isMouseDown: this.isMouseDown,
+                viewport: viewport,
                 source: e
             }
 
-            viewport.renderers.forEach(renderer => {
-                renderer.mouseMove(args);
+            self.interactions.forEach(interaction => {
+                if (interaction.mouseMove) interaction.mouseMove(args);
             });
 
             if (this.isMouseDown) {
@@ -59,10 +65,12 @@ function MouseHandler(viewport) {
                 this.isMouseDown = false;
                 const args = {
                     position: new Point(e.clientY, e.clientY),
+                    viewport: viewport,
                     source: e
                 }
-                viewport.renderers.forEach(renderer => {
-                    renderer.mouseUp(args);
+
+                self.interactions.forEach(interaction => {
+                    if (interaction.mouseUp) interaction.mouseUp(args);
                 });
                 viewport.setMaxResolution(4);
             }
@@ -71,13 +79,13 @@ function MouseHandler(viewport) {
         viewport.canvas.addEventListener('wheel', function(e) {
             const args = {
                 wheelDistance: wheelDistance(e),
+                viewport: viewport,
                 source: e
             }
-
-            viewport.renderers.forEach(renderer => {
-                renderer.mouseWheel(args);
-                viewport.invalidate();
+            self.interactions.forEach(interaction => { 
+                if (interaction.mouseWheel) interaction.mouseWheel(args); 
             });
+            viewport.invalidate();
         });
     }
 }
