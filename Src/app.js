@@ -1,13 +1,3 @@
-// Returns +1 for a single wheel roll 'up', -1 for a single roll 'down'
-function wheelDistance(evt) {
-    if (!evt) evt = event;
-    var w=evt.wheelDelta, d=evt.detail;
-    if (d) {
-      if (w) return w/d/40*d>0?1:-1; // Opera
-        else return -d/3;              // Firefox;
-    } else return w/120;             // IE/Safari/Chrome
-};
-
 function load() {
     var self = this;
 
@@ -19,12 +9,14 @@ function load() {
         var span = document.querySelector("#labelFps");
         span.innerHTML = fps;
     });
+    var mouseHandler = new MouseHandler(viewport);
+    mouseHandler.subscribe();
+
+    viewport.start();
 
     window.onresize = function() {
         viewport.invalidate();
     };
-
-    viewport.start();
 
     const sliderResolution = document.querySelector("#resolutionSlider");
     const checkboxAdaptiveResolution = document.querySelector("#checkboxAdaptiveResolution");
@@ -33,7 +25,6 @@ function load() {
     const labelSamplingRate = document.querySelector("#labelSamplingRate");
     const progressbarLoading = document.querySelector(".progress-bar");
     const progressPanel = document.querySelector(".progress");
-    const dropDowns = document.querySelectorAll(".dropdown-item");
     const labelWindowLevel = document.querySelector("#labelWindowLevel");
     const offsetSlider = document.querySelector("#offsetSlider");
     const thumbnails = document.querySelectorAll(".dataset-thumbnail");
@@ -76,51 +67,6 @@ function load() {
         viewport.setResolution(level);
     });
 
-    canvas.addEventListener('mousedown', function(e) {
-        e.preventDefault ();
-        var e = window.event || e;
-        if (e.button == 0) {
-            isMouseDown = true;
-            viewport.renderers.forEach(renderer => {
-                renderer.mouseDown(e);
-            });
-            viewport.setMaxResolution(1);
-            viewport.invalidate();
-        }
-    });
-
-    canvas.addEventListener('mousemove', function(e) {
-        e.preventDefault ();
-        var e = window.event || e;
-        viewport.renderers.forEach(renderer => {
-            renderer.mouseMove(e);
-        });
-
-        if (isMouseDown) {
-            viewport.invalidate();
-        }
-    });
-
-    canvas.addEventListener('mouseup', function(e) {
-        e.preventDefault ();
-        var e = window.event || e;
-        if (e.button == 0) {
-            isMouseDown = false;
-            viewport.renderers.forEach(renderer => {
-                renderer.mouseUp(e);
-            });
-            viewport.setMaxResolution(4);
-        }
-    });
-
-    canvas.addEventListener('wheel', function(e) {
-        viewport.renderers.forEach(renderer => {
-            renderer.mouseWheel(wheelDistance(e));
-            viewport.invalidate();
-        });
-    });
-
-
     thumbnails.forEach(function(item) {
         item.addEventListener('click', function(e) {
             var fileUrl = item.getAttribute("data-url");
@@ -134,24 +80,6 @@ function load() {
                 return !(value instanceof VolumeRenderer);
             });
             viewport.renderers.push(volume);
-            console.log(item.innerHTML);
-        });
-    });
-
-    dropDowns.forEach(function(item) {
-        item.addEventListener('click', function(e) {
-            var fileUrl = item.getAttribute("data-url");
-            var slope = item.getAttribute("data-slope");
-            var intercept = item.getAttribute("data-intercept");
-            var width = item.getAttribute("data-width");
-            var height = item.getAttribute("data-height");
-            var length = item.getAttribute("data-length");
-            self.volume = new VolumeRenderer(viewport.gl, fileUrl, slope, intercept, width, height, length);
-            viewport.renderers = viewport.renderers.filter(function(value, index, arr){
-                return !(value instanceof VolumeRenderer);
-            });
-            viewport.renderers.push(volume);
-            console.log(item.innerHTML);
         });
     });
 

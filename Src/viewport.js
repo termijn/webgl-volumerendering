@@ -1,4 +1,5 @@
 var Viewport = function(canvas, fpsCallback) {
+    this.canvas = canvas;
     this.lastDrawTime = performance.now() / 1000;
     this.valid = false;
     this.maxResolution = 4;

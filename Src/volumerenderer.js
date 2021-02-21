@@ -80,15 +80,15 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
         return newVector;
     }
 
-    this.mouseDown = function(e) {
+    this.mouseDown = function(args) {
         this.isMouseDragging = true;
-        this.startPosition = { x: e.clientX, y: e.clientY };
+        this.startPosition = args.position;
     }
 
-    this.mouseMove = function(e) {
-        if (!this.isMouseDragging) return;
-
-        var delta = { x: e.clientX - this.startPosition.x, y: e.clientY - this.startPosition.y };
+    this.mouseMove = function(args) {
+        if (!args.isMouseDown) return;
+        
+        var delta = args.position.subtract(this.startPosition);
 
         var cameraToModel = mat4.create();
         mat4.multiply(cameraToModel, this.worldToModel, this.cameraToWorld);
@@ -116,15 +116,15 @@ var VolumeRenderer = function(gl, fileUrl, rescaleSlope, rescaleIntercept, width
             delta.x * 0.007,
             yRay);
 
-        this.startPosition = { x: e.clientX, y: e.clientY };
+        this.startPosition = args.position;
     }
 
     this.mouseUp = function(e) {
         this.isMouseDragging = false;
     }
 
-    this.mouseWheel = function(distance) {
-        this.fieldOfView = Math.min(Math.PI / 180 * 120, Math.max(Math.PI / 180 * 5, this.fieldOfView * Math.pow(2, -distance / 10.0)));
+    this.mouseWheel = function(args) {
+        this.fieldOfView = Math.min(Math.PI / 180 * 120, Math.max(Math.PI / 180 * 5, this.fieldOfView * Math.pow(2, -args.wheelDistance / 10.0)));
     }
 
     this.createCubeStrip = function() {

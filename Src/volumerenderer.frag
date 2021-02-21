@@ -197,7 +197,6 @@ float softShadow(vec3 p) {
     
     float delta = min(voxelSize.x, min(voxelSize.y, voxelSize.z)) * 2.0;
     vec3 minPos = p - vec3(delta);
-    
     for (float z = -delta; z < delta; z += delta) {
         for (float y = -delta; y < delta; y += delta) {
             for (float x = -delta; x < delta; x += delta) {
